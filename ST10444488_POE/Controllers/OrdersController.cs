@@ -40,7 +40,7 @@ namespace ST10444488_POE.Controllers
         {
             ViewBag.Customers = _customerTable.Query<Customer>().ToList();
             ViewBag.Products = _productTable.Query<Product>().ToList();
-            return View(new Order()); 
+            return View(new Order());
         }
 
         [HttpPost]
@@ -55,13 +55,13 @@ namespace ST10444488_POE.Controllers
                 .ToList();
 
             order.Quantity = selectedProducts.Count;
-            order.TotalCost = selectedProducts.Sum(p => p.Price);
+            order.TotalCost = selectedProducts.Sum(p => (decimal)p.Price); // Fixed cast
             order.ProductNames = string.Join(", ", selectedProducts.Select(p => p.Name));
 
             if (string.IsNullOrEmpty(order.CustomerRowKey) || selectedProducts.Count == 0)
             {
                 ModelState.AddModelError("", "Please select a customer and at least one product.");
-                return View(order); // Redisplay with error
+                return View(order);
             }
 
             var customer = _customerTable.GetEntity<Customer>("Customer", order.CustomerRowKey).Value;
@@ -103,7 +103,7 @@ namespace ST10444488_POE.Controllers
             order.ProductRowKeys = updated.ProductRowKeys;
             order.ProductNames = string.Join(", ", selectedProducts.Select(p => p.Name));
             order.Quantity = selectedProducts.Count;
-            order.TotalCost = selectedProducts.Sum(p => p.Price);
+            order.TotalCost = selectedProducts.Sum(p => (decimal)p.Price); // Fixed cast
             order.OrderDate = updated.OrderDate;
 
             var customer = _customerTable.GetEntity<Customer>("Customer", updated.CustomerRowKey).Value;
@@ -128,4 +128,5 @@ namespace ST10444488_POE.Controllers
             return RedirectToAction(nameof(Index));
         }
     }
+
 }

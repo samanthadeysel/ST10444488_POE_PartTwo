@@ -9,13 +9,11 @@ namespace ST10444488_POE.Controllers
     {
         private readonly TableClient _productTable;
         private readonly BlobContainerClient _blobContainer;
-        private readonly IConfiguration _config;
 
         public ProductsController(IConfiguration config)
         {
-            _config = config;
+            string connectionString = config["AzureStorage:ConnectionString"];
 
-            string connectionString = _config["AzureStorage:ConnectionString"];
             _productTable = new TableClient(connectionString, "ProductTable");
             _blobContainer = new BlobContainerClient(connectionString, "productimages");
 
@@ -29,8 +27,11 @@ namespace ST10444488_POE.Controllers
             return View(products);
         }
 
-        public IActionResult Details(string partitionKey, string rowKey) =>
-            View(_productTable.GetEntity<Product>(partitionKey, rowKey).Value);
+        public IActionResult Details(string partitionKey, string rowKey)
+        {
+            var product = _productTable.GetEntity<Product>(partitionKey, rowKey).Value;
+            return View(product);
+        }
 
         public IActionResult Create() => View();
 
@@ -38,42 +39,37 @@ namespace ST10444488_POE.Controllers
         public async Task<IActionResult> Create(Product product, IFormFile ImageFile)
         {
             if (!ModelState.IsValid)
-            {
                 return View(product);
-            }
 
             product.PartitionKey = "Product";
             product.RowKey = Guid.NewGuid().ToString();
 
-            if (ImageFile == null || ImageFile.Length == 0)
+            if (ImageFile != null && ImageFile.Length > 0)
             {
-                ModelState.AddModelError("ImageFile", "Please upload a valid image.");
-                return View(product);
-            }
+                var extension = Path.GetExtension(ImageFile.FileName).ToLowerInvariant();
+                var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
 
-            var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
-            var extension = Path.GetExtension(ImageFile.FileName).ToLowerInvariant();
+                if (!allowedExtensions.Contains(extension))
+                {
+                    ModelState.AddModelError("ImageFile", "Only JPG and PNG files are allowed.");
+                    return View(product);
+                }
 
-            if (!allowedExtensions.Contains(extension))
-            {
-                ModelState.AddModelError("ImageFile", "Only JPG and PNG files are allowed.");
-                return View(product);
-            }
+                try
+                {
+                    var blobName = $"{product.RowKey}{extension}";
+                    var blobClient = _blobContainer.GetBlobClient(blobName);
 
-            try
-            {
-                var blobName = $"{product.RowKey}{extension}";
-                var blobClient = _blobContainer.GetBlobClient(blobName);
+                    using var stream = ImageFile.OpenReadStream();
+                    await blobClient.UploadAsync(stream, overwrite: true);
 
-                using var stream = ImageFile.OpenReadStream();
-                await blobClient.UploadAsync(stream, overwrite: true);
-
-                product.ImageUrl = blobClient.Uri.ToString();
-            }
-            catch (Exception ex)
-            {
-                ModelState.AddModelError("", $"Image upload failed: {ex.Message}");
-                return View(product);
+                    product.ImageUrl = blobClient.Uri.ToString();
+                }
+                catch (Exception ex)
+                {
+                    ModelState.AddModelError("", $"Image upload failed: {ex.Message}");
+                    return View(product);
+                }
             }
 
             try
@@ -89,16 +85,17 @@ namespace ST10444488_POE.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        public IActionResult Edit(string partitionKey, string rowKey) =>
-            View(_productTable.GetEntity<Product>(partitionKey, rowKey).Value);
+        public IActionResult Edit(string partitionKey, string rowKey)
+        {
+            var product = _productTable.GetEntity<Product>(partitionKey, rowKey).Value;
+            return View(product);
+        }
 
         [HttpPost]
         public async Task<IActionResult> Edit(Product product, IFormFile ImageFile)
         {
             if (!ModelState.IsValid)
-            {
                 return View(product);
-            }
 
             if (ImageFile != null && ImageFile.Length > 0)
             {
@@ -132,8 +129,11 @@ namespace ST10444488_POE.Controllers
             return RedirectToAction(nameof(Index));
         }
 
-        public IActionResult Delete(string partitionKey, string rowKey) =>
-            View(_productTable.GetEntity<Product>(partitionKey, rowKey).Value);
+        public IActionResult Delete(string partitionKey, string rowKey)
+        {
+            var product = _productTable.GetEntity<Product>(partitionKey, rowKey).Value;
+            return View(product);
+        }
 
         [HttpPost, ActionName("Delete")]
         public async Task<IActionResult> DeleteConfirmed(string partitionKey, string rowKey)
@@ -142,5 +142,4 @@ namespace ST10444488_POE.Controllers
             return RedirectToAction(nameof(Index));
         }
     }
-
 }
