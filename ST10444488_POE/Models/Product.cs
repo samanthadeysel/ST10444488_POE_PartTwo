@@ -11,7 +11,9 @@ namespace ST10444488_POE.Models
         public string Name { get; set; }
         public string Description { get; set; }
         public decimal Price { get; set; }
-        public string Catagory { get; set; }
+        public string Category { get; set; }
+        public string Sizes { get; set; }
+        public string ImageUrl { get; set; }
 
         public DateTimeOffset? Timestamp { get; set; }
         public ETag ETag { get; set; }

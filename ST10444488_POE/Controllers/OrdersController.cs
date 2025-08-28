@@ -1,5 +1,6 @@
 ﻿using Azure;
 using Azure.Data.Tables;
+using Azure.Storage.Queues;
 using Microsoft.AspNetCore.Mvc;
 using ST10444488_POE.Models;
 
@@ -11,10 +12,9 @@ namespace ST10444488_POE.Controllers
         private readonly TableClient _customerTable;
         private readonly TableClient _productTable;
 
-        public OrdersController()
+        public OrdersController(IConfiguration config)
         {
-            string connectionString = "<your_connection_string>";
-
+            string connectionString = config["AzureStorage:ConnectionString"];
             _orderTable = new TableClient(connectionString, "OrderTable");
             _customerTable = new TableClient(connectionString, "CustomerTable");
             _productTable = new TableClient(connectionString, "ProductTable");
@@ -33,12 +33,6 @@ namespace ST10444488_POE.Controllers
         public IActionResult Details(string partitionKey, string rowKey)
         {
             var order = _orderTable.GetEntity<Order>(partitionKey, rowKey).Value;
-            var customer = _customerTable.GetEntity<Customer>("Customer", order.CustomerId).Value;
-            var product = _productTable.GetEntity<Product>("Product", order.ProductId).Value;
-
-            ViewBag.CustomerName = $"{customer.FirstName} {customer.LastName}";
-            ViewBag.ProductName = product.Name;
-
             return View(order);
         }
 
@@ -46,19 +40,41 @@ namespace ST10444488_POE.Controllers
         {
             ViewBag.Customers = _customerTable.Query<Customer>().ToList();
             ViewBag.Products = _productTable.Query<Product>().ToList();
-            return View();
+            return View(new Order()); 
         }
 
         [HttpPost]
-        [ValidateAntiForgeryToken]
         public async Task<IActionResult> Create(Order order)
         {
-            order.PartitionKey = "Order";
+            ViewBag.Customers = _customerTable.Query<Customer>().ToList();
+            ViewBag.Products = _productTable.Query<Product>().ToList();
+
+            var selectedKeys = order.ProductRowKeys?.Split(',') ?? Array.Empty<string>();
+            var selectedProducts = _productTable.Query<Product>()
+                .Where(p => selectedKeys.Contains(p.RowKey))
+                .ToList();
+
+            order.Quantity = selectedProducts.Count;
+            order.TotalCost = selectedProducts.Sum(p => p.Price);
+            order.ProductNames = string.Join(", ", selectedProducts.Select(p => p.Name));
+
+            if (string.IsNullOrEmpty(order.CustomerRowKey) || selectedProducts.Count == 0)
+            {
+                ModelState.AddModelError("", "Please select a customer and at least one product.");
+                return View(order); // Redisplay with error
+            }
+
+            var customer = _customerTable.GetEntity<Customer>("Customer", order.CustomerRowKey).Value;
+            order.FirstName = customer.FirstName;
+            order.LastName = customer.LastName;
+            order.Address = customer.Address;
+
             order.RowKey = Guid.NewGuid().ToString();
+            order.PartitionKey = "Order";
             order.OrderDate = DateTime.Now;
 
             await _orderTable.AddEntityAsync(order);
-            return RedirectToAction(nameof(Index));
+            return RedirectToAction("Details", new { partitionKey = order.PartitionKey, rowKey = order.RowKey });
         }
 
         public IActionResult Edit(string partitionKey, string rowKey)
@@ -70,10 +86,32 @@ namespace ST10444488_POE.Controllers
         }
 
         [HttpPost]
-        [ValidateAntiForgeryToken]
-        public async Task<IActionResult> Edit(Order order)
+        public async Task<IActionResult> Edit(Order updated)
         {
-            await _orderTable.UpdateEntityAsync(order, order.ETag, TableUpdateMode.Replace);
+            ViewBag.Customers = _customerTable.Query<Customer>().ToList();
+            ViewBag.Products = _productTable.Query<Product>().ToList();
+
+            var existing = await _orderTable.GetEntityAsync<Order>(updated.PartitionKey, updated.RowKey);
+            var order = existing.Value;
+
+            var selectedKeys = updated.ProductRowKeys?.Split(',') ?? Array.Empty<string>();
+            var selectedProducts = _productTable.Query<Product>()
+                .Where(p => selectedKeys.Contains(p.RowKey))
+                .ToList();
+
+            order.CustomerRowKey = updated.CustomerRowKey;
+            order.ProductRowKeys = updated.ProductRowKeys;
+            order.ProductNames = string.Join(", ", selectedProducts.Select(p => p.Name));
+            order.Quantity = selectedProducts.Count;
+            order.TotalCost = selectedProducts.Sum(p => p.Price);
+            order.OrderDate = updated.OrderDate;
+
+            var customer = _customerTable.GetEntity<Customer>("Customer", updated.CustomerRowKey).Value;
+            order.FirstName = customer.FirstName;
+            order.LastName = customer.LastName;
+            order.Address = customer.Address;
+
+            await _orderTable.UpdateEntityAsync(order, ETag.All, TableUpdateMode.Replace);
             return RedirectToAction(nameof(Index));
         }
 
@@ -84,7 +122,6 @@ namespace ST10444488_POE.Controllers
         }
 
         [HttpPost, ActionName("Delete")]
-        [ValidateAntiForgeryToken]
         public async Task<IActionResult> DeleteConfirmed(string partitionKey, string rowKey)
         {
             await _orderTable.DeleteEntityAsync(partitionKey, rowKey);
@@ -92,4 +129,3 @@ namespace ST10444488_POE.Controllers
         }
     }
 }
-

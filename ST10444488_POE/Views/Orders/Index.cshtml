@@ -1,47 +1,42 @@
 ﻿@model IEnumerable<ST10444488_POE.Models.Order>
 
 @{
-    ViewData["Title"] = "Index";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Orders";
 }
 
-<h1>Index</h1>
+<h2>Orders</h2>
 
-<p>
-    <a asp-action="Create">Create New Order</a>
-</p>
+<div class="mb-3">
+    <a asp-action="Create" class="btn btn-success">
+        <i class="bi bi-plus-circle"></i> Add New Order
+    </a>
+</div>
+
 <table class="table">
     <thead>
         <tr>
-            <th>
-                @Html.DisplayNameFor(model => model.TotalCost)
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.CustomerId)
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.ProductId)
-            </th>
+            <th>Customer</th>
+            <th>Products</th>
+            <th>Total Cost</th>
+            <th>Order Date</th>
             <th></th>
         </tr>
     </thead>
     <tbody>
-@foreach (var item in Model) {
-        <tr>
-            <td>
-                @Html.DisplayFor(modelItem => item.TotalCost)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.CustomerId)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.ProductId)
-            </td>
-            <td>
-                <a asp-action="Edit" asp-route-id="@item.RowKey">Edit</a> |
-                <a asp-action="Details" asp-route-id="@item.RowKey">Details</a> |
-                <a asp-action="Delete" asp-route-id="@item.RowKey">Delete</a>
-            </td>
-        </tr>
-}
+        @foreach (var order in Model)
+        {
+            <tr>
+                <td>@order.FirstName @order.LastName</td>
+                <td>@order.ProductNames</td>
+                <td>R @order.TotalCost</td>
+                <td>@order.OrderDate.ToShortDateString()</td>
+                <td>
+                    <a asp-action="Details" asp-route-rowKey="@order.RowKey" asp-route-partitionKey="@order.PartitionKey">Details</a> |
+                    <a asp-action="Edit" asp-route-rowKey="@order.RowKey" asp-route-partitionKey="@order.PartitionKey">Edit</a> |
+                    <a asp-action="Delete" asp-route-rowKey="@order.RowKey" asp-route-partitionKey="@order.PartitionKey">Delete</a>
+                </td>
+            </tr>
+        }
     </tbody>
 </table>

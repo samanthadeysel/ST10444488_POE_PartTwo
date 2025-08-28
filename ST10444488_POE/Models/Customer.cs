@@ -13,6 +13,7 @@ namespace ST10444488_POE.Models
         public string Email { get; set; }
         public string Cellnumber { get; set; }
         public string Address { get; set; }
+        public string Document { get; set; }
 
         public DateTimeOffset? Timestamp { get; set; }
         public ETag ETag { get; set; }

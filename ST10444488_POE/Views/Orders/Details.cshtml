@@ -1,36 +1,16 @@
 ﻿@model ST10444488_POE.Models.Order
 
 @{
-    ViewData["Title"] = "Details";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Order";
 }
 
-<h1>Details</h1>
+<h2>Order Details</h2>
 
-<div>
-    <h4>Order</h4>
-    <hr />
-    <dl class="row">
-        <dt class = "col-sm-2">
-            @Html.DisplayNameFor(model => model.TotalCost)
-        </dt>
-        <dd class = "col-sm-10">
-            @Html.DisplayFor(model => model.TotalCost)
-        </dd>
-        <dt class = "col-sm-2">
-            @Html.DisplayNameFor(model => model.CustomerId)
-        </dt>
-        <dd class = "col-sm-10">
-            @Html.DisplayFor(model => model.CustomerId)
-        </dd>
-        <dt class = "col-sm-2">
-            @Html.DisplayNameFor(model => model.ProductId)
-        </dt>
-        <dd class = "col-sm-10">
-            @Html.DisplayFor(model => model.ProductId)
-        </dd>
-    </dl>
-</div>
-<div>
-    <a asp-action="Edit" asp-route-id="@Model?.RowKey">Edit</a> |
-    <a asp-action="Index">Back to List</a>
-</div>
+<p><strong>Customer:</strong> @Model.FirstName @Model.LastName</p>
+<p><strong>Products:</strong> @Model.ProductNames</p>
+<p><strong>Quantity:</strong> @Model.Quantity</p>
+<p><strong>Total Cost:</strong> R @Model.TotalCost.ToString("F2")</p>
+<p><strong>Order Date:</strong> @Model.OrderDate.ToShortDateString()</p>
+
+<a asp-action="Index">Back to List</a>

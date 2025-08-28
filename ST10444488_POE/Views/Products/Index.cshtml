@@ -1,53 +1,48 @@
 ﻿@model IEnumerable<ST10444488_POE.Models.Product>
 
+
 @{
-    ViewData["Title"] = "Index";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+    ViewBag.Title = "Products";
 }
 
-<h1>Index</h1>
+<h2 class="text-center mb-4">Fresh from the Oven</h2>
 
-<p>
-    <a asp-action="Create">Create New</a>
-</p>
-<table class="table">
-    <thead>
-        <tr>
-            <th>
-                @Html.DisplayNameFor(model => model.Name)
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.Description)
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.Price)
-            </th>
-            <th>
-                @Html.DisplayNameFor(model => model.Catagory)
-            </th>
-            <th></th>
-        </tr>
-    </thead>
-    <tbody>
-@foreach (var item in Model) {
-        <tr>
-            <td>
-                @Html.DisplayFor(modelItem => item.Name)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.Description)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.Price)
-            </td>
-            <td>
-                @Html.DisplayFor(modelItem => item.Catagory)
-            </td>
-            <td>
-                <a asp-action="Edit" asp-route-id="@item.RowKey">Edit</a> |
-                <a asp-action="Details" asp-route-id="@item.RowKey">Details</a> |
-                <a asp-action="Delete" asp-route-id="@item.RowKey">Delete</a>
-            </td>
-        </tr>
-}
-    </tbody>
-</table>
+<div class="text-end mb-4">
+    <a asp-action="Create" class="btn btn-success">
+        <i class="bi bi-plus-circle"></i> Add Product
+    </a>
+</div>
+
+<div class="row row-cols-1 row-cols-md-3 g-4">
+    @foreach (var product in Model)
+    {
+        <div class="col">
+            <div class="card h-100 shadow-sm">
+                @if (!string.IsNullOrEmpty(product.ImageUrl))
+                {
+                    <img src="@product.ImageUrl" class="card-img-top" alt="@product.Name" />
+                }
+                else
+                {
+                    <div class="card-img-top bg-light d-flex align-items-center justify-content-center" style="height:200px;">
+                        <span class="text-muted">No image available</span>
+                    </div>
+                }
+
+                <div class="card-body">
+                    <h5 class="card-title">@product.Name</h5>
+                    <p class="card-text">@product.Description</p>
+                    <p class="card-text fw-bold text-muted">R @product.Price.ToString("0.00")</p>
+                </div>
+                <div class="card-footer text-center">
+                    <a asp-controller="Orders" asp-action="Create" asp-route-id="@product.RowKey" class="btn btn-outline-primary">
+                        Order Now
+                    </a>
+                </div>
+            </div>
+        </div>
+    }
+</div>
+
+
