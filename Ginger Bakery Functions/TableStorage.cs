@@ -1,26 +1,41 @@
-using Azure;
-using Azure.Data.Tables;
-using Microsoft.Azure.Functions.Worker;
-using Microsoft.Azure.Functions.Worker.Http;
-using ST10444488_POE.Models;
 using System;
 using System.IO;
 using System.Net;
 using System.Text.Json;
 using System.Threading.Tasks;
+using Azure;
+using Azure.Data.Tables;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Azure.Functions.Worker.Http;
+using Microsoft.Extensions.Logging;
+using ST10444488_POE.Models;
 
 namespace Ginger_Bakery_Functions
 {
-    public class TableStorage
+    public class TableStorageFunction
     {
         [Function("SaveProductToTable")]
-        public async Task<HttpResponseData> SaveProductToTable(
+        public async Task<HttpResponseData> Run(
             [HttpTrigger(AuthorizationLevel.Function, "post")] HttpRequestData req,
-            FunctionContext executionContext)
+            FunctionContext context)
         {
-            var logger = executionContext.GetLogger("SaveProductToTable");
-            var requestBody = await new StreamReader(req.Body).ReadToEndAsync();
-            var product = JsonSerializer.Deserialize<Product>(requestBody);
+            var logger = context.GetLogger("SaveProductToTable");
+            logger.LogInformation("Received request to save product.");
+
+            string requestBody = await new StreamReader(req.Body).ReadToEndAsync();
+            Product product;
+
+            try
+            {
+                product = JsonSerializer.Deserialize<Product>(requestBody);
+            }
+            catch (JsonException ex)
+            {
+                logger.LogError(ex, "Failed to deserialize product.");
+                var errorResponse = req.CreateResponse(HttpStatusCode.BadRequest);
+                await errorResponse.WriteAsJsonAsync(new { error = "Invalid JSON format." });
+                return errorResponse;
+            }
 
             if (product == null || string.IsNullOrEmpty(product.RowKey) ||
                 string.IsNullOrEmpty(product.Name) || product.Price <= 0)
@@ -30,8 +45,9 @@ namespace Ginger_Bakery_Functions
                 return badResponse;
             }
 
-            var connectionString = Environment.GetEnvironmentVariable("StorageConnection");
+            var connectionString = Environment.GetEnvironmentVariable("connection");
             var tableClient = new TableClient(connectionString, "Products");
+
             await tableClient.CreateIfNotExistsAsync();
 
             product.PartitionKey ??= "Product";
@@ -44,9 +60,10 @@ namespace Ginger_Bakery_Functions
             await response.WriteAsJsonAsync(new
             {
                 success = true,
-                message = "Product saved successfully",
+                message = "Product saved successfully.",
                 productId = product.RowKey
             });
+
             return response;
         }
     }

@@ -36,24 +36,25 @@ builder.Services.AddSingleton(sp =>
 
 var app = builder.Build();
 
-// Set culture
 var cultureInfo = new CultureInfo("en-ZA");
 CultureInfo.DefaultThreadCurrentCulture = cultureInfo;
 CultureInfo.DefaultThreadCurrentUICulture = cultureInfo;
 
-// Middleware
-if (!app.Environment.IsDevelopment())
+if (app.Environment.IsDevelopment())
 {
-    app.UseExceptionHandler("/Home/Error");
+    app.UseDeveloperExceptionPage(); 
+}
+else
+{
+    app.UseExceptionHandler("/Home/Error"); 
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
-app.UseStaticFiles(); // ✅ Correct method
+app.UseStaticFiles();
 app.UseRouting();
 app.UseAuthorization();
 
-// Routing
 app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Home}/{action=Index}/{id?}");

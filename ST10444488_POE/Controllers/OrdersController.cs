@@ -3,6 +3,9 @@ using Azure.Data.Tables;
 using Azure.Storage.Queues;
 using Microsoft.AspNetCore.Mvc;
 using ST10444488_POE.Models;
+using System.Text.Json;
+using System.Text;
+using System.Net.Http;
 
 namespace ST10444488_POE.Controllers
 {
@@ -11,9 +14,11 @@ namespace ST10444488_POE.Controllers
         private readonly TableClient _orderTable;
         private readonly TableClient _customerTable;
         private readonly TableClient _productTable;
+        private readonly IConfiguration _config;
 
         public OrdersController(IConfiguration config)
         {
+            _config = config;
             string connectionString = config["AzureStorage:ConnectionString"];
             _orderTable = new TableClient(connectionString, "OrderTable");
             _customerTable = new TableClient(connectionString, "CustomerTable");
@@ -55,7 +60,7 @@ namespace ST10444488_POE.Controllers
                 .ToList();
 
             order.Quantity = selectedProducts.Count;
-            order.TotalCost = selectedProducts.Sum(p => (decimal)p.Price); // Fixed cast
+            order.TotalCost = selectedProducts.Sum(p => (decimal)p.Price);
             order.ProductNames = string.Join(", ", selectedProducts.Select(p => p.Name));
 
             if (string.IsNullOrEmpty(order.CustomerRowKey) || selectedProducts.Count == 0)
@@ -74,6 +79,12 @@ namespace ST10444488_POE.Controllers
             order.OrderDate = DateTime.Now;
 
             await _orderTable.AddEntityAsync(order);
+
+            var queueClient = new QueueClient(_config["AzureStorage:ConnectionString"], "order-queue");
+            await queueClient.CreateIfNotExistsAsync();
+            var queueMessage = JsonSerializer.Serialize(order);
+            await queueClient.SendMessageAsync(queueMessage);
+
             return RedirectToAction("Details", new { partitionKey = order.PartitionKey, rowKey = order.RowKey });
         }
 
@@ -103,7 +114,7 @@ namespace ST10444488_POE.Controllers
             order.ProductRowKeys = updated.ProductRowKeys;
             order.ProductNames = string.Join(", ", selectedProducts.Select(p => p.Name));
             order.Quantity = selectedProducts.Count;
-            order.TotalCost = selectedProducts.Sum(p => (decimal)p.Price); // Fixed cast
+            order.TotalCost = selectedProducts.Sum(p => (decimal)p.Price);
             order.OrderDate = updated.OrderDate;
 
             var customer = _customerTable.GetEntity<Customer>("Customer", updated.CustomerRowKey).Value;
@@ -128,5 +139,4 @@ namespace ST10444488_POE.Controllers
             return RedirectToAction(nameof(Index));
         }
     }
-
 }

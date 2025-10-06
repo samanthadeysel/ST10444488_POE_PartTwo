@@ -1,35 +1,51 @@
-﻿using Azure.Data.Tables;
-using Azure.Storage.Blobs;
-using Microsoft.AspNetCore.Mvc;
+﻿using Microsoft.AspNetCore.Mvc;
 using ST10444488_POE.Models;
+using System.Net.Http;
+using System.Text;
+using System.Text.Json;
 
 namespace ST10444488_POE.Controllers
 {
     public class ProductsController : Controller
     {
-        private readonly TableClient _productTable;
-        private readonly BlobContainerClient _blobContainer;
+        private readonly IConfiguration _config;
+        private readonly HttpClient _httpClient;
 
         public ProductsController(IConfiguration config)
         {
-            string connectionString = config["AzureStorage:ConnectionString"];
-
-            _productTable = new TableClient(connectionString, "ProductTable");
-            _blobContainer = new BlobContainerClient(connectionString, "productimages");
-
-            _productTable.CreateIfNotExists();
-            _blobContainer.CreateIfNotExists();
+            _config = config;
+            _httpClient = new HttpClient();
         }
 
-        public IActionResult Index()
+        public async Task<IActionResult> Index()
         {
-            var products = _productTable.Query<Product>().ToList();
+            var functionUrl = _config["AzureFunctions:GetProductList"];
+            var response = await _httpClient.GetAsync(functionUrl);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                ViewData["Error"] = "Failed to retrieve products.";
+                return View(new List<Product>());
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var products = JsonSerializer.Deserialize<List<Product>>(json);
             return View(products);
         }
 
-        public IActionResult Details(string partitionKey, string rowKey)
+        public async Task<IActionResult> Details(string partitionKey, string rowKey)
         {
-            var product = _productTable.GetEntity<Product>(partitionKey, rowKey).Value;
+            var functionUrl = $"{_config["AzureFunctions:GetProductDetails"]}?partitionKey={partitionKey}&rowKey={rowKey}";
+            var response = await _httpClient.GetAsync(functionUrl);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                ViewData["Error"] = "Failed to retrieve product details.";
+                return View();
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var product = JsonSerializer.Deserialize<Product>(json);
             return View(product);
         }
 
@@ -38,56 +54,74 @@ namespace ST10444488_POE.Controllers
         [HttpPost]
         public async Task<IActionResult> Create(Product product, IFormFile ImageFile)
         {
-            if (!ModelState.IsValid)
-                return View(product);
-
-            product.PartitionKey = "Product";
             product.RowKey = Guid.NewGuid().ToString();
+            product.PartitionKey = "Product";
 
             if (ImageFile != null && ImageFile.Length > 0)
             {
-                var extension = Path.GetExtension(ImageFile.FileName).ToLowerInvariant();
-                var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
+                using var ms = new MemoryStream();
+                await ImageFile.CopyToAsync(ms);
+                var base64 = Convert.ToBase64String(ms.ToArray());
 
-                if (!allowedExtensions.Contains(extension))
+                var uploadRequest = new
                 {
-                    ModelState.AddModelError("ImageFile", "Only JPG and PNG files are allowed.");
+                    ProductId = product.RowKey,
+                    FileName = ImageFile.FileName,
+                    FileData = base64
+                };
+
+                var functionUrl = _config["AzureFunctions:UploadProductImage"];
+                var json = JsonSerializer.Serialize(uploadRequest);
+                var content = new StringContent(json, Encoding.UTF8, "application/json");
+
+                var response = await _httpClient.PostAsync(functionUrl, content);
+                var resultJson = await response.Content.ReadAsStringAsync();
+
+                if (!response.IsSuccessStatusCode)
+                {
+                    ModelState.AddModelError("", $"Image upload failed: {resultJson}");
                     return View(product);
                 }
 
-                try
-                {
-                    var blobName = $"{product.RowKey}{extension}";
-                    var blobClient = _blobContainer.GetBlobClient(blobName);
-
-                    using var stream = ImageFile.OpenReadStream();
-                    await blobClient.UploadAsync(stream, overwrite: true);
-
-                    product.ImageUrl = blobClient.Uri.ToString();
-                }
-                catch (Exception ex)
-                {
-                    ModelState.AddModelError("", $"Image upload failed: {ex.Message}");
-                    return View(product);
-                }
+                var result = JsonSerializer.Deserialize<Dictionary<string, string>>(resultJson);
+                product.ImageUrl = result["imageUrl"];
             }
 
-            try
+            ModelState.Clear();
+            TryValidateModel(product);
+
+            if (!ModelState.IsValid)
+                return View(product);
+
+            var createUrl = _config["AzureFunctions:CreateProduct"];
+            var productJson = JsonSerializer.Serialize(product);
+            var createContent = new StringContent(productJson, Encoding.UTF8, "application/json");
+
+            var createResponse = await _httpClient.PostAsync(createUrl, createContent);
+
+            if (!createResponse.IsSuccessStatusCode)
             {
-                await _productTable.AddEntityAsync(product);
-            }
-            catch (Exception ex)
-            {
-                ModelState.AddModelError("", $"Product save failed: {ex.Message}");
+                var error = await createResponse.Content.ReadAsStringAsync();
+                ModelState.AddModelError("", $"Failed to create product: {error}");
                 return View(product);
             }
 
             return RedirectToAction(nameof(Index));
         }
 
-        public IActionResult Edit(string partitionKey, string rowKey)
+        public async Task<IActionResult> Edit(string partitionKey, string rowKey)
         {
-            var product = _productTable.GetEntity<Product>(partitionKey, rowKey).Value;
+            var functionUrl = $"{_config["AzureFunctions:GetProductDetails"]}?partitionKey={partitionKey}&rowKey={rowKey}";
+            var response = await _httpClient.GetAsync(functionUrl);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                ViewData["Error"] = "Failed to retrieve product for editing.";
+                return View();
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var product = JsonSerializer.Deserialize<Product>(json);
             return View(product);
         }
 
@@ -97,48 +131,57 @@ namespace ST10444488_POE.Controllers
             if (!ModelState.IsValid)
                 return View(product);
 
+            var functionUrl = _config["AzureFunctions:UpdateProduct"];
+            var content = new MultipartFormDataContent
+            {
+                { new StringContent(JsonSerializer.Serialize(product), Encoding.UTF8, "application/json"), "product" }
+            };
+
             if (ImageFile != null && ImageFile.Length > 0)
             {
-                var extension = Path.GetExtension(ImageFile.FileName).ToLowerInvariant();
-                var allowedExtensions = new[] { ".jpg", ".jpeg", ".png" };
-
-                if (!allowedExtensions.Contains(extension))
-                {
-                    ModelState.AddModelError("ImageFile", "Only JPG and PNG files are allowed.");
-                    return View(product);
-                }
-
-                try
-                {
-                    var blobName = $"{product.RowKey}{extension}";
-                    var blobClient = _blobContainer.GetBlobClient(blobName);
-
-                    using var stream = ImageFile.OpenReadStream();
-                    await blobClient.UploadAsync(stream, overwrite: true);
-
-                    product.ImageUrl = blobClient.Uri.ToString();
-                }
-                catch (Exception ex)
-                {
-                    ModelState.AddModelError("", $"Image upload failed: {ex.Message}");
-                    return View(product);
-                }
+                var stream = ImageFile.OpenReadStream();
+                content.Add(new StreamContent(stream), "ImageFile", ImageFile.FileName);
             }
 
-            await _productTable.UpdateEntityAsync(product, product.ETag, TableUpdateMode.Replace);
+            var response = await _httpClient.PutAsync(functionUrl, content);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                ModelState.AddModelError("", "Failed to update product via Azure Function.");
+                return View(product);
+            }
+
             return RedirectToAction(nameof(Index));
         }
 
-        public IActionResult Delete(string partitionKey, string rowKey)
+        public async Task<IActionResult> Delete(string partitionKey, string rowKey)
         {
-            var product = _productTable.GetEntity<Product>(partitionKey, rowKey).Value;
+            var functionUrl = $"{_config["AzureFunctions:GetProductDetails"]}?partitionKey={partitionKey}&rowKey={rowKey}";
+            var response = await _httpClient.GetAsync(functionUrl);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                ViewData["Error"] = "Failed to retrieve product for deletion.";
+                return View();
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            var product = JsonSerializer.Deserialize<Product>(json);
             return View(product);
         }
 
         [HttpPost, ActionName("Delete")]
         public async Task<IActionResult> DeleteConfirmed(string partitionKey, string rowKey)
         {
-            await _productTable.DeleteEntityAsync(partitionKey, rowKey);
+            var functionUrl = $"{_config["AzureFunctions:DeleteProduct"]}?partitionKey={partitionKey}&rowKey={rowKey}";
+            var response = await _httpClient.DeleteAsync(functionUrl);
+
+            if (!response.IsSuccessStatusCode)
+            {
+                ViewData["Error"] = "Failed to delete product via Azure Function.";
+                return RedirectToAction(nameof(Index));
+            }
+
             return RedirectToAction(nameof(Index));
         }
     }

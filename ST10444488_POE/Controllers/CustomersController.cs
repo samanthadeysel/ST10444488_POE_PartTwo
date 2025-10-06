@@ -1,10 +1,11 @@
 ﻿using Azure;
 using Azure.Data.Tables;
-using Azure.Storage.Files.Shares;
-using Azure.Storage.Files.Shares.Models;
+using Azure.Storage.Queues;
 using Microsoft.AspNetCore.Mvc;
 using ST10444488_POE.Models;
-using System.IO;
+using System.Text.Json;
+using System.Text;
+using System.Net.Http;
 
 namespace ST10444488_POE.Controllers
 {
@@ -12,19 +13,21 @@ namespace ST10444488_POE.Controllers
     {
         private readonly TableClient _customerTable;
         private readonly TableClient _productTable;
-        private readonly ShareClient _shareClient;
+        private readonly QueueClient _queueClient;
+        private readonly IConfiguration _config;
 
         public CustomersController(IConfiguration configuration)
         {
+            _config = configuration;
             string connectionString = configuration["AzureStorage:ConnectionString"];
 
             _customerTable = new TableClient(connectionString, "CustomerTable");
             _productTable = new TableClient(connectionString, "ProductTable");
-            _shareClient = new ShareClient(connectionString, "documentshare");
+            _queueClient = new QueueClient(connectionString, "customer-queue");
 
             _customerTable.CreateIfNotExists();
             _productTable.CreateIfNotExists();
-            _shareClient.CreateIfNotExists();
+            _queueClient.CreateIfNotExists();
         }
 
         public IActionResult Index() =>
@@ -44,31 +47,17 @@ namespace ST10444488_POE.Controllers
         }
 
         [HttpPost]
-        public async Task<IActionResult> Create(Customer customer, IFormFile Document)
+        public async Task<IActionResult> Create(Customer customer)
         {
             customer.RowKey = Guid.NewGuid().ToString();
             customer.PartitionKey = "Customer";
 
-            if (Document != null && Document.Length > 0)
-            {
-                string fileName = $"{customer.RowKey}_{Path.GetFileName(Document.FileName)}";
-
-                ShareDirectoryClient rootDir = _shareClient.GetRootDirectoryClient();
-                ShareFileClient fileClient = rootDir.GetFileClient(fileName);
-
-                using var stream = Document.OpenReadStream();
-                await fileClient.CreateAsync(stream.Length);
-
-                byte[] buffer = new byte[stream.Length];
-                await stream.ReadAsync(buffer, 0, buffer.Length);
-
-                using var uploadStream = new MemoryStream(buffer);
-                await fileClient.UploadRangeAsync(new HttpRange(0, buffer.Length), uploadStream);
-
-                customer.Document = fileName;
-            }
-
             await _customerTable.AddEntityAsync(customer);
+
+            // 🔗 Enqueue customer for Azure Function to process
+            var message = JsonSerializer.Serialize(customer);
+            await _queueClient.SendMessageAsync(message);
+
             return RedirectToAction(nameof(Index));
         }
 
@@ -115,42 +104,6 @@ namespace ST10444488_POE.Controllers
         {
             await _customerTable.DeleteEntityAsync(partitionKey, rowKey);
             return RedirectToAction(nameof(Index));
-        }
-
-        [HttpPost]
-        public async Task<IActionResult> UploadCreditDocument(IFormFile creditDoc, string customerId)
-        {
-            var allowedExtensions = new[] { ".pdf", ".doc", ".docx" };
-            var extension = Path.GetExtension(creditDoc?.FileName ?? "").ToLowerInvariant();
-
-            if (creditDoc == null || creditDoc.Length == 0)
-            {
-                ViewData["UploadMessage"] = "Please select a file to upload.";
-                return View();
-            }
-
-            if (!allowedExtensions.Contains(extension))
-            {
-                ViewData["UploadMessage"] = "Only PDF or Word documents (.pdf, .doc, .docx) are allowed.";
-                return View();
-            }
-
-            string fileName = $"{customerId}_{Path.GetFileName(creditDoc.FileName)}";
-
-            ShareDirectoryClient rootDir = _shareClient.GetRootDirectoryClient();
-            ShareFileClient fileClient = rootDir.GetFileClient(fileName);
-
-            using var stream = creditDoc.OpenReadStream();
-            await fileClient.CreateAsync(stream.Length);
-
-            byte[] buffer = new byte[stream.Length];
-            await stream.ReadAsync(buffer, 0, buffer.Length);
-
-            using var uploadStream = new MemoryStream(buffer);
-            await fileClient.UploadRangeAsync(new HttpRange(0, buffer.Length), uploadStream);
-
-            ViewData["UploadMessage"] = "Document uploaded successfully.";
-            return View();
         }
     }
 }

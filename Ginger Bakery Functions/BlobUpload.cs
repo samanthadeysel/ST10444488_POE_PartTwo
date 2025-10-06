@@ -34,7 +34,7 @@ namespace Ginger_Bakery_Functions
                     return badResponse;
                 }
 
-                var connectionString = Environment.GetEnvironmentVariable("StorageConnection");
+                var connectionString = "DefaultEndpointsProtocol=https;AccountName=st10444488storage;AccountKey=A8CZd4IDN6EjwcyWTiQCEHIQyfizs+w7se4OpZzM8II/4i/pYSWvS4t/NPzwyW+lak8HG1SBWH9a+AStn44BLw==;EndpointSuffix=core.windows.net";
                 var containerClient = new BlobContainerClient(connectionString, "product-images");
                 await containerClient.CreateIfNotExistsAsync(PublicAccessType.Blob);
 
@@ -83,7 +83,7 @@ namespace Ginger_Bakery_Functions
                     return badResponse;
                 }
 
-                var connectionString = Environment.GetEnvironmentVariable("StorageConnection");
+                var connectionString = "DefaultEndpointsProtocol=https;AccountName=st10444488storage;AccountKey=A8CZd4IDN6EjwcyWTiQCEHIQyfizs+w7se4OpZzM8II/4i/pYSWvS4t/NPzwyW+lak8HG1SBWH9a+AStn44BLw==;EndpointSuffix=core.windows.net";
                 var uri = new Uri(deleteRequest.ImageUrl);
                 var containerClient = new BlobContainerClient(connectionString, "product-images");
                 var blobName = uri.Segments[^1];
@@ -112,8 +112,9 @@ namespace Ginger_Bakery_Functions
     {
         public string ProductId { get; set; }
         public string FileName { get; set; }
-        public string FileData { get; set; } // base64-encoded image string
+        public string FileData { get; set; }
     }
+
     public class DeleteImageRequest
     {
         public string ImageUrl { get; set; }

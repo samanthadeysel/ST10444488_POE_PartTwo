@@ -38,7 +38,7 @@ namespace Ginger_Bakery_Functions
                     return badResponse;
                 }
 
-                var connectionString = Environment.GetEnvironmentVariable("StorageConnection");
+                var connectionString = "DefaultEndpointsProtocol=https;AccountName=st10444488storage;AccountKey=A8CZd4IDN6EjwcyWTiQCEHIQyfizs+w7se4OpZzM8II/4i/pYSWvS4t/NPzwyW+lak8HG1SBWH9a+AStn44BLw==;EndpointSuffix=core.windows.net";
                 var shareClient = new ShareClient(connectionString, "customer-files");
                 await shareClient.CreateIfNotExistsAsync();
 

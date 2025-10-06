@@ -1,32 +1,36 @@
-using Microsoft.Azure.Functions.Worker;
-using Microsoft.Azure.WebJobs;
-using Microsoft.Azure.WebJobs.Host;
-using Microsoft.Extensions.Logging;
 using System;
 using System.Text.Json;
-using System.Threading.Tasks;
+using Microsoft.Azure.Functions.Worker;
+using Microsoft.Extensions.Logging;
 
 namespace Ginger_Bakery_Functions
 {
-    public class QueueTrigger
+    public class OrderQueueFunction
     {
         [Function("ProcessOrderQueue")]
-        public async Task ProcessOrderQueue(
-            [QueueTrigger("order-queue", Connection = "StorageConnection")] string message,
+        public void Run(
+            [QueueTrigger("order-queue", Connection = "connection")] string queueMessage,
             FunctionContext context)
         {
             var logger = context.GetLogger("ProcessOrderQueue");
-            logger.LogInformation($"Processing order message: {message}");
+            logger.LogInformation($"Received queue message: {queueMessage}");
 
             try
             {
-                var order = JsonSerializer.Deserialize<OrderMessage>(message);
+                var order = JsonSerializer.Deserialize<OrderMessage>(queueMessage);
+
+                if (order == null || string.IsNullOrEmpty(order.CustomerName))
+                {
+                    logger.LogWarning("Invalid or incomplete order message.");
+                    return;
+                }
+
+                logger.LogInformation($"Processing order for {order.CustomerName}.");
                 // Add your order processing logic here
-                logger.LogInformation($"Order for {order.CustomerName} processed.");
             }
             catch (Exception ex)
             {
-                logger.LogError(ex, "Failed to process order message.");
+                logger.LogError(ex, "Failed to process queue message.");
             }
         }
     }
@@ -37,6 +41,4 @@ namespace Ginger_Bakery_Functions
         public string ProductId { get; set; }
         public int Quantity { get; set; }
     }
-
 }
-
