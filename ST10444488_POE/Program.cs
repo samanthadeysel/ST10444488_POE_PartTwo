@@ -3,43 +3,59 @@ using Azure.Storage.Blobs;
 using Azure.Storage.Files.Shares;
 using Azure.Storage.Queues;
 using Microsoft.Extensions.DependencyInjection;
+using ST10444488_POE.StorageServices;
 using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
 
-
-// Add services to the container.
 builder.Services.AddControllersWithViews();
-builder.Services.AddSingleton(x => new TableServiceClient("<your_connection_string>"));
-builder.Services.AddSingleton(x => new BlobServiceClient("<your_connection_string>"));
-builder.Services.AddSingleton(x => new QueueServiceClient("<your_connection_string>"));
-builder.Services.AddSingleton(x => new ShareClient("<your_connection_string>", "documentshare"));
+
+builder.Services.AddSingleton(sp =>
+{
+    var conn = Environment.GetEnvironmentVariable("StorageConnection");
+    return new BlobStorage(conn, "product-images");
+});
+
+builder.Services.AddSingleton(sp =>
+{
+    var conn = Environment.GetEnvironmentVariable("StorageConnection");
+    return new TableStorage(conn);
+});
+
+builder.Services.AddSingleton(sp =>
+{
+    var conn = Environment.GetEnvironmentVariable("StorageConnection");
+    return new QueueStorage(conn, "order-queue");
+});
+
+builder.Services.AddSingleton(sp =>
+{
+    var conn = Environment.GetEnvironmentVariable("StorageConnection");
+    return new FileStorage(conn, "customer-files", "documents");
+});
 
 var app = builder.Build();
 
+// Set culture
 var cultureInfo = new CultureInfo("en-ZA");
 CultureInfo.DefaultThreadCurrentCulture = cultureInfo;
 CultureInfo.DefaultThreadCurrentUICulture = cultureInfo;
 
-
+// Middleware
 if (!app.Environment.IsDevelopment())
 {
     app.UseExceptionHandler("/Home/Error");
-    // The default HSTS value is 30 days. You may want to change this for production scenarios, see https://aka.ms/aspnetcore-hsts.
     app.UseHsts();
 }
 
 app.UseHttpsRedirection();
+app.UseStaticFiles(); // ✅ Correct method
 app.UseRouting();
-
 app.UseAuthorization();
 
-app.MapStaticAssets();
-
+// Routing
 app.MapControllerRoute(
     name: "default",
-    pattern: "{controller=Home}/{action=Index}/{id?}")
-    .WithStaticAssets();
-
+    pattern: "{controller=Home}/{action=Index}/{id?}");
 
 app.Run();

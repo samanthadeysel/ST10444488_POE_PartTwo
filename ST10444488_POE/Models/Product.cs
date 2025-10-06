@@ -27,6 +27,8 @@ namespace ST10444488_POE.Models
 
         [BindNever]
         public string ImageUrl { get; set; }
+        public string FileName { get; set; }
+        public string Filedata { get; set; }
 
         public DateTimeOffset? Timestamp { get; set; }
         public ETag ETag { get; set; }
