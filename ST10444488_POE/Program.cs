@@ -2,13 +2,21 @@
 using Azure.Storage.Blobs;
 using Azure.Storage.Files.Shares;
 using Azure.Storage.Queues;
+using Microsoft.AspNetCore.Identity;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
+using ST10444488_POE.Data;
+using ST10444488_POE.Models;
 using ST10444488_POE.StorageServices;
+using System;
 using System.Globalization;
 
 var builder = WebApplication.CreateBuilder(args);
 
 builder.Services.AddControllersWithViews();
+builder.Services.AddMvc().AddSessionStateTempDataProvider();
+builder.Services.AddDbContext<ST10444488_POEContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("AzureSQL")));
 
 builder.Services.AddSingleton(sp =>
 {
@@ -34,6 +42,23 @@ builder.Services.AddSingleton(sp =>
     return new FileStorage(conn, "customer-files", "documents");
 });
 
+builder.Services.AddIdentity<User, IdentityRole>(options =>
+{
+    options.Password.RequireDigit = true;
+    options.Password.RequireLowercase = true;
+    options.Password.RequireUppercase = true;
+    options.Password.RequiredLength = 10;
+    options.User.RequireUniqueEmail = true;
+
+    options.SignIn.RequireConfirmedAccount = true;
+    options.SignIn.RequireConfirmedPhoneNumber = true;
+    options.SignIn.RequireConfirmedEmail = true;
+})
+.AddEntityFrameworkStores<ST10444488_POEContext>()
+.AddDefaultTokenProviders();
+
+
+
 var app = builder.Build();
 
 var cultureInfo = new CultureInfo("en-ZA");
@@ -53,6 +78,7 @@ else
 app.UseHttpsRedirection();
 app.UseStaticFiles();
 app.UseRouting();
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllerRoute(

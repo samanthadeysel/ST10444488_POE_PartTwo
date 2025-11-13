@@ -7,7 +7,7 @@ namespace ST10444488_POE.Models
     public class Order : ITableEntity
     {
         public string PartitionKey { get; set; } = "Order";
-        public string RowKey { get; set; } //order id
+        public string RowKey { get; set; }
 
         public string CustomerRowKey { get; set; }
         public string FirstName {  get; set; }
